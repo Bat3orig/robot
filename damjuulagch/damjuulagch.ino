@@ -2,6 +2,8 @@
 #include "lpms.h"
 #include "PS2X_lib.h"
 
+// roate zassan
+
 // #define PASS_ROBOT
 #define SHOT_ROBOT
 
