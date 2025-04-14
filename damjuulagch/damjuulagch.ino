@@ -22,6 +22,8 @@
 #define PULL_PWM 8
 #define PUSH_PWM 9
 #define PUSH_BALL 53
+#define RELAY_STAND 51
+#define RELAY_STRETCH 49
 
 #define NO_ROTATE 0
 #define ROTATE_LEFT_SLOW 1
@@ -94,6 +96,8 @@ typedef struct {
 MOTOR_PARAMS suuri, shot, hand;
 
 float euler = 0;      // lpms - ийн өнцөг
+bool stand = false;
+bool stretch = false;
 
 void setup() {
   Serial.begin(115200); // simulator
@@ -112,6 +116,8 @@ void setup() {
   pinMode(PULL_PWM, OUTPUT);
   pinMode(PUSH_PWM, OUTPUT);
   pinMode(PUSH_BALL, OUTPUT);
+  pinMode(RELAY_STAND, OUTPUT);
+  pinMode(RELAY_STRETCH, OUTPUT);
   attachInterrupt(digitalPinToInterrupt(EN_A), encoderISR, RISING);
 
   digitalWrite(PULL_PWM, 0);
@@ -121,6 +127,8 @@ void setup() {
   digitalWrite(ACCEPT1_PWM, 0);
   digitalWrite(ACCEPT2_PWM, 0);
   digitalWrite(PUSH_BALL, HIGH);
+  digitalWrite(RELAY_STAND, HIGH);
+  digitalWrite(RELAY_STRETCH, HIGH);
 
   // init params
   suuri.currentSpeed = 0;
@@ -191,17 +199,21 @@ void loop() {
     suuri.rotate = NO_ROTATE;
   } else {
     // joystick - ийн 0 - 255 утгыг нэмэх, хасах утга руу хөрвүүлэх
-    int x = map(rx, 0, 255, -100, 100);
-    int y = map(ry, 0, 255, 100, -100);
+    int x = map(lx, 0, 255, -100, 100);
+    int y = map(ly, 0, 255, 100, -100);
+    Serial.print("x: ");
+    Serial.print(x);
+    Serial.print("\ty: ");
+    Serial.println(y);
 
-    if( x < 20)
-        suuri.rotate = ROTATE_LEFT_SLOW;
+    if( x < -80)
+      suuri.rotate = ROTATE_RIGHT_SLOW;  
     else if(x > 80)
-      suuri.rotate = ROTATE_RIGHT_SLOW;
-    else if(y < 20 )
-      suuri.rotate = ROTATE_LEFT_FAST;
-    else if(y > 80) 
+      suuri.rotate = ROTATE_LEFT_SLOW;
+    else if(y < -80 )
       suuri.rotate = ROTATE_RIGHT_FAST;
+    else if(y > 80) 
+      suuri.rotate = ROTATE_LEFT_FAST;
     suuri.brake = false;
   }
 
@@ -232,13 +244,15 @@ void loop() {
     digitalWrite(PUSH_BALL, HIGH);
   }
   if (ps2x.ButtonPressed(PSB_CIRCLE)) {
-    Serial.println("CIRCLE pressed");
+    stretch = !stretch;
+    digitalWrite(RELAY_STRETCH, stretch);
   }
   if (ps2x.ButtonPressed(PSB_CROSS)) {  // Хэрвээ X точвлуур дарагдвал, бүх мотор brake хийнэ.
     suuri.brake = true;
   }
   if (ps2x.ButtonPressed(PSB_SQUARE)) {
-    Serial.println("SQUARE pressed");
+    stand = !stand;
+    digitalWrite(RELAY_STAND, stand);
   }
 
   if (ps2x.Button(PSB_L1)) {
@@ -310,16 +324,16 @@ void move() {
   else {
     suuri.angle = euler;
     if(suuri.rotate == ROTATE_LEFT_SLOW) {
-      theta = -rotate_scale * 2;
+      theta = -rotate_scale * 3;
     }
     else if(suuri.rotate == ROTATE_LEFT_FAST) {
-      theta = -rotate_scale * 5;
+      theta = -rotate_scale * 6;
     }
     else if(suuri.rotate == ROTATE_RIGHT_SLOW) {
-      theta = +rotate_scale * 2;
+      theta = rotate_scale * 3;
     }
     else if(suuri.rotate == ROTATE_RIGHT_FAST) {
-      theta = +rotate_scale * 5;
+      theta = rotate_scale * 6;
     }
   } 
 
