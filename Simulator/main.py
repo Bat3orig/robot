@@ -35,6 +35,7 @@ class Main(tk.Tk):
 
         self.shot_speed = tk.IntVar(value = 0)
         self.pull_speed = tk.IntVar(value = 0)
+        self.pull_encoder = tk.IntVar(value = 0)
 
         connection = ttk.Frame(self)   
         status = ttk.Frame(self)
@@ -71,6 +72,8 @@ class Main(tk.Tk):
         ttk.Label(status, textvariable=self.robot_dir).grid(row=3, column=1, sticky='EW')
         ttk.Label(status, text="Хурд: ").grid(row=4, column=0, sticky='EW')
         ttk.Label(status, textvariable=self.robot_speed).grid(row=4, column=1, sticky='EW')
+        ttk.Label(status, text="Гар энкодер: ").grid(row=5, column=0, sticky='EW')
+        ttk.Label(status, textvariable=self.pull_encoder).grid(row=5, column=1, sticky='EW')
 
         status.grid_columnconfigure(0, weight=0)
         status.grid_columnconfigure(1, weight=0)
@@ -78,6 +81,7 @@ class Main(tk.Tk):
         status.grid_rowconfigure(1, weight=0, pad=10)
         status.grid_rowconfigure(2, weight=0, pad=10)
         status.grid_rowconfigure(3, weight=0, pad=10)
+        status.grid_rowconfigure(4, weight=0, pad=10)
 
         # scale
         ttk.Label(suuri, text="Коэфициентууд:").grid(row=0, column=0, columnspan=2, sticky='EW')
@@ -233,6 +237,8 @@ class Main(tk.Tk):
                                     self.robot_speed.set(float(value))
                                 elif key == 'dir':
                                     self.robot_dir.set(float(value))
+                                elif key == 'enc':
+                                    self.pull_encoder.set(int(value))
                 except Exception as ex:
                     print("Error: ", ex)
 
