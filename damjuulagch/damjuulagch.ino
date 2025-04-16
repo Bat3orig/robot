@@ -12,12 +12,11 @@
   --> negative rotation
 */
 
+#ifdef PASS_ROBOT
 Motor motor1(4, 46, 48);  // pwm, A, B
 Motor motor2(5, 52, 50);  
 Motor motor3(2, 38, 40);
 Motor motor4(3, 44, 42);
-
-#ifdef PASS_ROBOT
 float rotate_scale = 3; // angle * rotate_scle => pwm
 float accel = 1;  // 100 => 1 + 1 + 1 + = 100. 0 => 100 -1 - 1- 1 0
 float scale_m1 = 1; //60 = 60
@@ -27,12 +26,16 @@ float scale_m4 = 1.25; // 60 = 72
 #endif
 
 #ifdef SHOT_ROBOT
+Motor motor1(4, 48, 46);  // pwm, A, B
+Motor motor2(5, 50, 52);  
+Motor motor3(2, 40, 38);
+Motor motor4(3, 44, 42);
 float rotate_scale = 3; // angle * rotate_scle => pwm
 float accel = 1;  // 100 => 1 + 1 + 1 + = 100. 0 => 100 -1 - 1- 1 0
 float scale_m1 = 1; //60 = 60
 float scale_m2 = 1; // 60 = 60
-float scale_m3 = 0.85; // 60 = 52
-float scale_m4 = 1.25; // 60 = 72
+float scale_m3 = 1; // 60 = 52
+float scale_m4 = 1; // 60 = 72
 #endif
 
 
@@ -51,7 +54,6 @@ typedef struct {
 
 MOTOR_PARAMS suuri, shot, hand;
 
-float euler = 0;      // lpms - ийн өнцөг
 bool stand = false;
 bool stretch = false;
 
@@ -62,29 +64,29 @@ void setup() {
   motor2.init();
   motor3.init();
   motor4.init();
-  pinMode(EN_A, INPUT_PULLUP);
-  pinMode(EN_B, INPUT_PULLUP);
-  pinMode(LIMIT_SWITCH, INPUT);
-  pinMode(SHOT1_PWM, OUTPUT);
-  pinMode(SHOT2_PWM, OUTPUT);
-  pinMode(ACCEPT1_PWM, OUTPUT);
-  pinMode(ACCEPT2_PWM, OUTPUT);
-  pinMode(PULL_PWM, OUTPUT);
-  pinMode(PUSH_PWM, OUTPUT);
-  pinMode(PUSH_BALL, OUTPUT);
-  pinMode(RELAY_STAND, OUTPUT);
-  pinMode(RELAY_STRETCH, OUTPUT);
-  attachInterrupt(digitalPinToInterrupt(EN_A), encoderISR, RISING);
+  pinMode(PIN_EN_A, INPUT_PULLUP);
+  pinMode(PIN_EN_B, INPUT_PULLUP);
+  pinMode(PIN_LIMIT_SWITCH, INPUT);
+  pinMode(PIN_SHOT1_PWM, OUTPUT);
+  pinMode(PIN_SHOT2_PWM, OUTPUT);
+  pinMode(PIN_ACCEPT1_PWM, OUTPUT);
+  pinMode(PIN_ACCEPT2_PWM, OUTPUT);
+  pinMode(PIN_PULL_PWM, OUTPUT);
+  pinMode(PIN_PUSH_PWM, OUTPUT);
+  pinMode(PIN_PUSH_BALL, OUTPUT);
+  pinMode(PIN_STAND, OUTPUT);
+  pinMode(PIN_STRETCH, OUTPUT);
+  attachInterrupt(digitalPinToInterrupt(PIN_EN_A), encoderISR, RISING);
 
-  digitalWrite(PULL_PWM, 0);
-  digitalWrite(PUSH_PWM, 0);
-  digitalWrite(SHOT1_PWM, 0);
-  digitalWrite(SHOT2_PWM, 0);
-  digitalWrite(ACCEPT1_PWM, 0);
-  digitalWrite(ACCEPT2_PWM, 0);
-  digitalWrite(PUSH_BALL, HIGH);
-  digitalWrite(RELAY_STAND, HIGH);
-  digitalWrite(RELAY_STRETCH, HIGH);
+  digitalWrite(PIN_PULL_PWM, 0);
+  digitalWrite(PIN_PUSH_PWM, 0);
+  digitalWrite(PIN_SHOT1_PWM, 0);
+  digitalWrite(PIN_SHOT2_PWM, 0);
+  digitalWrite(PIN_ACCEPT1_PWM, 0);
+  digitalWrite(PIN_ACCEPT2_PWM, 0);
+  digitalWrite(PIN_PUSH_BALL, HIGH);
+  digitalWrite(PIN_STAND, HIGH);
+  digitalWrite(PIN_STRETCH, HIGH);
 
   // init params
   suuri.currentSpeed = 0;
@@ -102,7 +104,7 @@ void setup() {
 
   delay(1000); // wait for LPMS power on
 
-  ps2x.config_gamepad(PS2_CLK, PS2_CMD, PS2_CS, PS2_DAT);  // clk, cmd, att, dat
+  ps2x.config_gamepad(PIN_PS2_CLK, PIN_PS2_CMD, PIN_PS2_CS, PIN_PS2_DAT);  // clk, cmd, att, dat
 
   // analogWrite(PULL_PWM, 10);
 
@@ -171,12 +173,6 @@ void setup() {
   //   }
   // }
 
-
-  while (!lpms.setMode(COMMAND_MODE))
-    ;
-  delay(1000);
-  while (!lpms.setOffset());  // euler - ийг 0 болгоно.
-
   // // init hand location
   // analogWrite(PULL_PWM, 100);
   // while(isLimitSwitchPressed());
@@ -195,10 +191,6 @@ void setup() {
 
 
 void loop() {
-  /***************** update LPMS euler ***************************/
-  if (lpms.requestAngle()) {
-    euler = lpms.euler[Z];
-  }
 
   /***************** read Joystick and process commands **********/
   ps2x.read_gamepad();
@@ -241,13 +233,13 @@ void loop() {
     Serial.println(y);
 
     if( x < -80)
-      suuri.rotate = ROTATE_RIGHT_SLOW;  
-    else if(x > 80)
-      suuri.rotate = ROTATE_LEFT_SLOW;
-    else if(y < -80 )
       suuri.rotate = ROTATE_RIGHT_FAST;
-    else if(y > 80) 
+    else if(x > 80)
       suuri.rotate = ROTATE_LEFT_FAST;
+    else if(y < -80 )
+      suuri.rotate = ROTATE_RIGHT_SLOW;  
+    else if(y > 80) 
+      suuri.rotate = ROTATE_LEFT_SLOW;
     suuri.brake = false;
   }
 
@@ -264,49 +256,53 @@ void loop() {
     Serial.println("PAD RIGHT");
   }
   if (ps2x.Button(PSB_PAD_UP)) {
-    hand.currentSpeed = -150;
+    hand.currentSpeed = PUSH_PWM;
   }
   else if (ps2x.Button(PSB_PAD_DOWN)) {
-    hand.currentSpeed = 150;
+    hand.currentSpeed = PULL_PWM;
   }
   else{
     hand.currentSpeed = 0;
   }
-  if (ps2x.ButtonPressed(PSB_TRIANGLE)) {
-    digitalWrite(PUSH_BALL, LOW);
-    delay(2000);
-    digitalWrite(PUSH_BALL, HIGH);
+  // PUSH BALL
+  if (ps2x.Button(PSB_TRIANGLE)) {
+    digitalWrite(PIN_PUSH_BALL, LOW);
   }
+  else {
+    digitalWrite(PIN_PUSH_BALL, HIGH);
+  }
+  // STRETCH ROBOT
   if (ps2x.ButtonPressed(PSB_CIRCLE)) {
     stretch = !stretch;
-    digitalWrite(RELAY_STRETCH, stretch);
+    digitalWrite(PIN_STRETCH, stretch);
   }
   if (ps2x.ButtonPressed(PSB_CROSS)) {  // Хэрвээ X точвлуур дарагдвал, бүх мотор brake хийнэ.
     suuri.brake = true;
   }
+  // STAND ROBOT
   if (ps2x.ButtonPressed(PSB_SQUARE)) {
     stand = !stand;
-    digitalWrite(RELAY_STAND, stand);
+    digitalWrite(PIN_STAND, stand);
+  }      
+  // DRIBBLE BALL TO ITSELF
+  if (ps2x.Button(PSB_L1)) {  // DRIBBLE
+    dribble_rotate(DRIBBLE_PWM);
   }
-
-  if (ps2x.Button(PSB_L1)) {
-    dribble_rotate(80);
-    // shot.targetSpeed = DRIBBLE_PWM;
+  // PASS BALL TO SHOT ROBOT
+  else if (ps2x.Button(PSB_L2)) { // PASS
+    shot_rotate(PASS_PWM);
   }
-  else if (ps2x.Button(PSB_L2)) {
-    // shot.targetSpeed = PASS_PWM;
-    shot_rotate(60);
+  // SHOT BALL in MEDIUM range
+  else if (ps2x.Button(PSB_R1)) { // SHOT medium range
+    shot_rotate(SHOT_PWM);
   }
-  else if (ps2x.Button(PSB_R1)) {
-    // shot.targetSpeed = SHOT_PWM;
-    shot_rotate(250);
+  // SHOT BALL in LONG RANGE
+  else if (ps2x.Button(PSB_R2)) { // SHOT long range
+    shot_rotate(LONG_SHOT_PWM);
   }
-  else if (ps2x.Button(PSB_R2)) {
-    shot_rotate(210);
-    // shot.targetSpeed = LONG_SHOT_PWM;
-  }
-  else if (ps2x.Button(PSB_START)) {
-    accept_rotate(100);
+  // ACCEPT BALL AFTER DIRBBLE BALL
+  else if (ps2x.Button(PSB_START)) { // ACCEPT
+    accept_rotate(ACCEPT_PWM);
   }
   else {
     stop_rotate();
@@ -315,6 +311,7 @@ void loop() {
   if (ps2x.ButtonPressed(PSB_SELECT)) {
     Serial.println("SELECT pressed");
   }
+
   if(suuri.brake == true) {
     motor1.stop();
     motor2.stop();
@@ -329,8 +326,7 @@ void loop() {
 }
 
 void move() {
-  // Роботыг acceleration хийж хөдөлгөхийн тулд хурд бага багаар нэмэгдүүлэх эсвэл хорогдуулна.
-  if(suuri.targetSpeed == 0) {
+   if(suuri.targetSpeed == 0) {
     suuri.currentSpeed -= 2;
     if(suuri.currentSpeed > -5 && suuri.currentSpeed < 5)
       suuri.currentSpeed = 0;
@@ -353,11 +349,7 @@ void move() {
   float scale = rotate_scale;
   float theta = 0;
 
-  if(suuri.rotate == NO_ROTATE) {
-    theta = suuri.angle - euler;  // joystick - ээс ирж буй өнцөг болон LPMS өнцөг 2 - ийн зөрүүгээр робот дөөрөө эргэх хөдөлгөөн хийнэ.
-  }
-  else {
-    suuri.angle = euler;
+  if(suuri.rotate != NO_ROTATE) {
     if(suuri.rotate == ROTATE_LEFT_SLOW) {
       theta = -rotate_scale * 3;
     }
@@ -372,12 +364,6 @@ void move() {
     }
   } 
 
-  if (theta > 180) theta -= 360;
-  if (theta < -180) theta += 360;
-
-  // if(abs(theta) < 5) 
-  //   scale *= 5;
-
   float w1 = -Vx - Vy - theta * scale;
   float w2 = -Vx + Vy - theta * scale;
   float w3 = Vx + Vy - theta * scale;
@@ -387,34 +373,35 @@ void move() {
   motor2.setSpeed(w2 * scale_m2);
   motor3.setSpeed(w3 * scale_m3);
   motor4.setSpeed(w4 * scale_m4);
+
 }
 
 void dribble_rotate(int speed) {
-  analogWrite(SHOT1_PWM, abs(speed));
-  analogWrite(SHOT2_PWM, 0);
-  digitalWrite(ACCEPT1_PWM, 0);
-  digitalWrite(ACCEPT2_PWM, 0);
+  analogWrite(PIN_SHOT1_PWM, abs(speed));
+  analogWrite(PIN_SHOT2_PWM, 0);
+  digitalWrite(PIN_ACCEPT1_PWM, 0);
+  digitalWrite(PIN_ACCEPT2_PWM, 0);
 }
 
 void shot_rotate(int speed) {
-  analogWrite(SHOT1_PWM, abs(speed));
-  analogWrite(SHOT2_PWM, abs(speed));
-  digitalWrite(ACCEPT1_PWM, 0);
-  digitalWrite(ACCEPT2_PWM, 0);
+  analogWrite(PIN_SHOT1_PWM, abs(speed));
+  analogWrite(PIN_SHOT2_PWM, abs(speed));
+  digitalWrite(PIN_ACCEPT1_PWM, 0);
+  digitalWrite(PIN_ACCEPT2_PWM, 0);
 }
 
 void accept_rotate(int speed) {
-  digitalWrite(SHOT1_PWM, 0);
-  digitalWrite(SHOT2_PWM, 0);
-  analogWrite(ACCEPT1_PWM, abs(speed));
-  analogWrite(ACCEPT2_PWM, abs(speed));
+  digitalWrite(PIN_SHOT1_PWM, 0);
+  digitalWrite(PIN_SHOT2_PWM, 0);
+  analogWrite(PIN_ACCEPT1_PWM, abs(speed));
+  analogWrite(PIN_ACCEPT2_PWM, abs(speed));
 }
 
 void stop_rotate() {
-  digitalWrite(ACCEPT1_PWM, 0);
-  digitalWrite(ACCEPT2_PWM, 0);
-  digitalWrite(SHOT1_PWM, 0);
-  digitalWrite(SHOT2_PWM, 0);
+  digitalWrite(PIN_ACCEPT1_PWM, 0);
+  digitalWrite(PIN_ACCEPT2_PWM, 0);
+  digitalWrite(PIN_SHOT1_PWM, 0);
+  digitalWrite(PIN_SHOT2_PWM, 0);
 
 }
 
@@ -422,38 +409,38 @@ void stop_rotate() {
 void pull() {
   int pwm = constrain(hand.currentSpeed, -250, 250);
   if(hand.currentSpeed < 0){
-    if(digitalRead(LIMIT_SWITCH) == HIGH) {
+    if(digitalRead(PIN_LIMIT_SWITCH) == HIGH) {
       digitalWrite(PULL_PWM, 0);
       digitalWrite(PUSH_PWM, 0);
       hand.currentSpeed = 0;
     }
     else {
-      analogWrite(PUSH_PWM, abs(pwm));
+      analogWrite(PIN_PUSH_PWM, abs(pwm));
     }
   }
   else if(hand.currentSpeed > 0){
     if(hand.encoder >= HAND_MAX_LOCATION)
-      digitalWrite(PULL_PWM, 0);
+      digitalWrite(PIN_PULL_PWM, 0);
     else
-      analogWrite(PULL_PWM, abs(pwm));
+      analogWrite(PIN_PULL_PWM, abs(pwm));
   }
   else {
-    digitalWrite(PULL_PWM, 0);
-    digitalWrite(PUSH_PWM, 0);
+    digitalWrite(PIN_PULL_PWM, 0);
+    digitalWrite(PIN_PUSH_PWM, 0);
   }
 }
 
 void encoderISR() {
-  if(digitalRead(EN_B) == LOW)
+  if(digitalRead(PIN_EN_B) == LOW)
     hand.encoder++;
   else
     hand.encoder--;
 }
 
 bool isLimitSwitchPressed() {
-  if(digitalRead(LIMIT_SWITCH) == HIGH) {
+  if(digitalRead(PIN_LIMIT_SWITCH) == HIGH) {
     unsigned long checkMillis = millis();
-    while(digitalRead(LIMIT_SWITCH) == HIGH) {
+    while(digitalRead(PIN_LIMIT_SWITCH) == HIGH) {
       if(millis() - checkMillis > 50)
         return true;
     } 
@@ -477,9 +464,9 @@ void simulate() {
   unsigned long currentMillis = millis();
   bool start = false;
   while(1) {
-    if (lpms.requestAngle()) {
-      euler = lpms.euler[Z];
-    }
+    // if (lpms.requestAngle()) {
+    //   euler = lpms.euler[Z];
+    // }
 
     if(Serial.available()) {
       String inputString = Serial.readStringUntil('\n');
@@ -527,26 +514,12 @@ void simulate() {
         hand.currentSpeed = getValue(inputString, "pwm").toInt();
       }
       else if(inputString.startsWith("shot")) {
-        digitalWrite(PUSH_BALL, LOW);
+        digitalWrite(PIN_PUSH_BALL, LOW);
         delay(2000);
-        digitalWrite(PUSH_BALL, HIGH);
+        digitalWrite(PIN_PUSH_BALL, HIGH);
       }
     }
 
-    Serial.print("euler=");
-    Serial.print(euler);
-    Serial.print(",angle=");
-    Serial.print(suuri.angle);
-    Serial.print(",speed=");
-    Serial.print(suuri.currentSpeed);
-    Serial.print(",dir=");
-    Serial.print(suuri.direction);
-    Serial.print(",enc=");
-    Serial.println(hand.encoder);
-
-
-    if(start == false)
-      suuri.angle = euler;
     move();
     pull(); 
   }
