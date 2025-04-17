@@ -49,6 +49,7 @@ class LPMS {
     bool setOffset(); // LPMS - ийн Euler_Z - ийг 0 болгоно.
     bool setMode(byte command);
     float euler[3];
+    bool fail = false;
 
   private:
     HardwareSerial *serial;

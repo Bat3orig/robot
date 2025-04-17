@@ -43,34 +43,34 @@ bool LPMS::requestAngle() {
 
 // LPMS - ээс ирэх packet - ийг уншиж, шалгах функц. Өгөгдсөн wait (миллисекунд) хугацаанд өгөгдөл ирэхгүй бол parse хийхгүй.
 bool LPMS::readPacket(unsigned long wait){
-    unsigned long current = millis();
-    bool ready = false;
-    while(1) {
-      if(millis() - current > wait) 
-        return false;
-      if(serial->available()) {
-        byte Byte= serial->read();
-        // Packet толгой буюу HEAD ирээгүй бол
-        if(!ready) {
-          if(Byte == HEAD) {
-            ready = true;
-            index = 0;
+      unsigned long current = millis();
+      bool ready = false;
+      while(1) {
+        if(millis() - current > wait) 
+          return false;
+        if(serial->available()) {
+          byte Byte= serial->read();
+          // Packet толгой буюу HEAD ирээгүй бол
+          if(!ready) {
+            if(Byte == HEAD) {
+              ready = true;
+              index = 0;
+            }
           }
-        }
-        // Packet толгой HEAD ирсэн бол үргэлжлүүлэн parse хийнэ.
-        if(ready) {
-          if(index < MAX_PACKET_LENGTH)
-            packet[index++] = Byte;
-          else 
-            return false;
-          // Хэрвээ packet - ийн END байтууд ирсэн бол packet - ийн LRC - ийг шалгаад буцаана.
-          if(packet[index - 2] == END1 && packet[index - 1] == END2) {
-            ready = false;
-            return checkLRC(index-3);
+          // Packet толгой HEAD ирсэн бол үргэлжлүүлэн parse хийнэ.
+          if(ready) {
+            if(index < MAX_PACKET_LENGTH)
+              packet[index++] = Byte;
+            else 
+              return false;
+            // Хэрвээ packet - ийн END байтууд ирсэн бол packet - ийн LRC - ийг шалгаад буцаана.
+            if(packet[index - 2] == END1 && packet[index - 1] == END2) {
+              ready = false;
+              return checkLRC(index-3);
+            }
           }
         }
       }
-    }
     return false;
 }
 
@@ -81,7 +81,7 @@ bool LPMS::setOffset() {
   for(uint8_t i = 0; i < 15; i++) {
     serial->write(buffer[i]);
   }
-  bool ret = readPacket(500);
+  bool ret = readPacket(5000);
   if(ret) {
     if(packet[3] == 0 && packet[4] == 0) 
       return true;
@@ -99,7 +99,7 @@ bool LPMS::setMode(byte command) {
     serial->write(buffer[i]);
   }
 
-  bool ret = readPacket(500);
+  bool ret = readPacket(5000);
   if(ret) {
     if(packet[3] == 0 && packet[4] == 0) 
       return true;
