@@ -1,28 +1,56 @@
+#include <Wire.h>
 #include "defines.h"
-#include "lpms.h" 
 #include "motor.h"
 #include "PS2X_lib.h"
 
-#define LPMS_SERIAL Serial1
+#ifdef SHOT_ROBOT
+  // shot robot has LPMS-ME1 9 axis sensor
+  #include "lpms.h" 
+  #define PIN_EN_A 20
+  #define PIN_EN_B 21
+  Motor motor1(POLOLU, 48, 46, 4);  // type, A, B and pwm. pwm is optional
+  Motor motor2(POLOLU, 50, 52, 5);  
+  Motor motor3(POLOLU, 40, 38, 2);
+  Motor motor4(POLOLU, 44, 42, 3);
+  float rotate_scale = 3; // angle * rotate_scle => pwm
+  float accel = 1;  // 100 => 1 + 1 + 1 + = 100. 0 => 100 -1 - 1- 1 0
+  float scale_m1 = 1; //60 = 60
+  float scale_m2 = 1; // 60 = 60
+  float scale_m3 = 1; // 60 = 52
+  float scale_m4 = 1; // 60 = 72
+  LPMS lpms(Serial1);
+#else
+  // PASS ROBOT has MPU9250 9 axis sensor
+  #include "MPU9250.h"
+  Motor motor1(POLOLU, 46, 48, 4);  // pwm, A, B
+  Motor motor2(POLOLU, 52, 50, 5);  
+  Motor motor3(POLOLU, 38, 40, 2);
+  Motor motor4(POLOLU, 44, 42, 3);
+  float rotate_scale = 3; // angle * rotate_scle => pwm
+  float accel = 1;  // 100 => 1 + 1 + 1 + = 100. 0 => 100 -1 - 1- 1 0
+  float scale_m1 = 1; //60 = 60
+  float scale_m2 = 1; // 60 = 60
+  float scale_m3 = 0.85; // 60 = 52
+  float scale_m4 = 1.25; // 60 = 72
+  MPU9250 mpu;  
+#endif
+
 
 // PS2 GPIO
 #define PIN_PS2_CLK 22  // CLK
 #define PIN_PS2_CMD 25  // MOSI
 #define PIN_PS2_CS 24   // Chip select
 #define PIN_PS2_DAT 23  // MISO
-
-// ENCODER GPIO
-#define PIN_EN_A 20
-#define PIN_EN_B 21
-
-// SWITCH AND BUTTON PINS
 #define PIN_LIMIT_SWITCH 47
+#define SHOT_RELAY 51
+#define STRETCH_RELAY 53
 
-// RELAY PINS OF PINEMATIC
-uint8_t RELAY_PINS[3] = {49, 51, 53};   // PUSH BALL, STRETCH, STAND
-#define BALL 0
-#define STAND 1
-#define STRETCH 2
+#define IDLE 0
+#define PASS 1
+#define DRIBBLE 2
+#define SHOT 3
+#define LONG_SHOT 4
+#define ACCEPT 5
 
 Motor motor_shot_up(LBT2, 10, 11);
 Motor motor_shot_down(LBT2, 6, 7);
@@ -36,32 +64,8 @@ Motor motor_hand(LBT2, 8, 9);
   <-- positive rotation  A = high B = low
   --> negative rotation
 */
-#ifdef SHOT_ROBOT
-  Motor motor1(POLOLU, 48, 46, 4);  // type, A, B and pwm. pwm is optional
-  Motor motor2(POLOLU, 50, 52, 5);  
-  Motor motor3(POLOLU, 40, 38, 2);
-  Motor motor4(POLOLU, 44, 42, 3);
-  float rotate_scale = 3; // angle * rotate_scle => pwm
-  float accel = 1;  // 100 => 1 + 1 + 1 + = 100. 0 => 100 -1 - 1- 1 0
-  float scale_m1 = 1; //60 = 60
-  float scale_m2 = 1; // 60 = 60
-  float scale_m3 = 1; // 60 = 52
-  float scale_m4 = 1; // 60 = 72
-#else
-  // PASS ROBOT
-  Motor motor1(POLOLU, 46, 48, 4);  // pwm, A, B
-  Motor motor2(POLOLU, 52, 50, 5);  
-  Motor motor3(POLOLU, 38, 40, 2);
-  Motor motor4(POLOLU, 44, 42, 3);
-  float rotate_scale = 3; // angle * rotate_scle => pwm
-  float accel = 1;  // 100 => 1 + 1 + 1 + = 100. 0 => 100 -1 - 1- 1 0
-  float scale_m1 = 1; //60 = 60
-  float scale_m2 = 1; // 60 = 60
-  float scale_m3 = 0.85; // 60 = 52
-  float scale_m4 = 1.25; // 60 = 72
-#endif
 
-LPMS lpms(LPMS_SERIAL);
+
 PS2X ps2;
 
 typedef struct {
@@ -73,46 +77,58 @@ typedef struct {
 SUURI_PARAMS current, target;
 
 int encoder = 0;
-bool lpms_running = false;
+bool gyro_running = false;
 float euler = 0;  // lpms - ийн өнцөг
 float angle = 0;  // robot - ийн эргүүлэх өнцөг
-bool stand = false;
+uint8_t shot_state = IDLE;
+uint8_t next_shot_state = IDLE;
+uint32_t shot_millis = 0;
 bool stretch = false;
 
 void setup() {
   Serial.begin(115200); // simulator
-  lpms.begin(115200);
-  motor1.init(100);
-  motor2.init(100);
-  motor3.init(100);
-  motor4.init(100);
-  motor_hand.init(100);
+  Wire.begin();
+  delay(2000);
+  #ifdef SHOT_ROBOT // Init LPMS-ME1
+    pinMode(PIN_EN_A, INPUT_PULLUP);
+    pinMode(PIN_EN_B, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(PIN_EN_A), encoderISR, RISING);
+    motor1.init(10);
+    motor2.init(100);
+    motor3.init(100);
+    motor4.init(100);
+    lpms.begin(115200);
+    if(lpms.setMode(COMMAND_MODE)) {
+      Serial.println("Command mode success");
+      delay(2000);
+      if(lpms.setOffset()) {
+        Serial.println("Setoffset success");
+        gyro_running = true;
+      }
+    }
+  #else   // PASS_ROBOT. Init MPU9250
+    if (mpu.setup(0x68)) {  
+      gyro_running = true;
+    }
+    motor1.init(150);
+    motor2.init(150);
+    motor3.init(150);
+    motor4.init(150);
+  #endif
+  motor_hand.init(200);
   motor_shot_up.init(250);
   motor_shot_down.init(250);
-  pinMode(PIN_EN_A, INPUT_PULLUP);
-  pinMode(PIN_EN_B, INPUT_PULLUP);
   pinMode(PIN_LIMIT_SWITCH, INPUT);
-  for(uint8_t i = 0; i < 3; i++) {
-    pinMode(RELAY_PINS[i], OUTPUT);
-    digitalWrite(RELAY_PINS[i], HIGH);
-  }
-
-  attachInterrupt(digitalPinToInterrupt(PIN_EN_A), encoderISR, RISING);
-
-  delay(5000); // wait for LPMS power on
+  pinMode(STRETCH_RELAY, OUTPUT);
+  pinMode(SHOT_RELAY, OUTPUT);
+  digitalWrite(STRETCH_RELAY, HIGH);
+  digitalWrite(SHOT_RELAY, HIGH);
 
   // ps2.begin(PIN_PS2_CLK, PIN_PS2_CMD, PIN_PS2_CS, PIN_PS2_DAT);  // clk, cmd, att, dat
   ps2.config_gamepad(PIN_PS2_CLK, PIN_PS2_CMD, PIN_PS2_CS, PIN_PS2_DAT);  // clk, cmd, att, dat
+  
+  // unsigned long ms = millis();
 
-  if(lpms.setMode(COMMAND_MODE)) {
-    Serial.println("Command mode success");
-    delay(2000);
-    if(lpms.setOffset()) {
-      Serial.println("Setoffset success");
-      lpms_running = true;
-    }
-  }
-  // init hand location
   motor_hand.setSpeed(PULL_PWM);
   while(isLimitSwitchPressed());
   motor_hand.stop();
@@ -122,21 +138,31 @@ void setup() {
   motor_hand.stop();
   encoder = 0;
 
-  
   // uncomment the following the lines for simulator of windows software.
   // Serial.println("log->Ready");
-  // if(Serial) {
-  //   simulate();
-  // }
+  if(Serial) {
+    simulate();
+  }
 }
 
 void loop() {
-  /***************** LPMS - ийн өнцгийг унших ***************************/
-  if(lpms_running) {
-    if (lpms.requestAngle()) {
-      euler = lpms.euler[Z];
+  /***************** Euler Z өнцгийг унших ***************************/
+  #ifdef SHOT_ROBOT
+    if(gyro_running) {
+      if (lpms.requestAngle()) {
+        euler = lpms.euler[Z];
+      }
     }
-  }
+  #else
+    if(gyro_running) {
+      if(mpu.update()) {
+        static uint32_t prev_ms = millis();
+        if(millis() > prev_ms + 25) {
+          euler = mpu.getYaw();
+        }
+      }
+    }
+  #endif
 
   /***************** Joystick уншиж, боловсруулах **********/
   ps2.read_gamepad();
@@ -150,6 +176,7 @@ void loop() {
     motor4.stop();
     angle = euler;
     current.speed = 0;
+    target.speed = 0;
     motor_shot_up.stop();
     motor_shot_down.stop();
   }
@@ -158,13 +185,13 @@ void loop() {
   }
 
   /***************** Pinematic  ******************/
+  if(ps2.Button(PSB_TRIANGLE)) 
+    digitalWrite(SHOT_RELAY, LOW);
+  else
+    digitalWrite(SHOT_RELAY, HIGH);
   if(ps2.ButtonPressed(PSB_SQUARE)) {
-    stand = !stand;
-    digitalWrite(RELAY_PINS[STAND], stand);
-  }
-  if(ps2.ButtonPressed(PSB_CIRCLE)) {
+    digitalWrite(STRETCH_RELAY, stretch);
     stretch = !stretch;
-    digitalWrite(RELAY_PINS[STRETCH], stretch);
   }
 
 
@@ -186,34 +213,74 @@ void loop() {
   }
 
   // /***************** Шидэлт ******************/
-  if(ps2.ButtonPressed(PSB_L1)) {
-    motor_shot_up.stop();
-    motor_shot_down.setSpeed(DRIBBLE_PWM);
-    shot(DRIBBLE_DELAY);
-    delay(1000);
-    motor_shot_up.setSpeed(ACCEPT_PWM);
-    motor_shot_down.setSpeed(ACCEPT_PWM);
+  if(ps2.ButtonPressed(PSB_L1)) {           // DRIBLE ROTATION
+    shot_millis = millis();
+    next_shot_state = DRIBBLE;
   }
-  else if(ps2.ButtonPressed(PSB_L2)) {
-    motor_shot_up.setSpeed(PASS_PWM);
-    motor_shot_down.setSpeed(PASS_PWM);
-    shot(PASS_DELAY);
+  else if(ps2.ButtonPressed(PSB_L2)) {      // PASS ROTATION
+    if(shot_state == DRIBBLE || shot_state == ACCEPT) {
+      shot_millis = millis();
+    }
+    next_shot_state = PASS;
   }
-  else if(ps2.ButtonPressed(PSB_R1)) {
-    motor_shot_up.setSpeed(SHOT_PWM);
-    motor_shot_down.setSpeed(SHOT_PWM);
-    shot(SHOT_DELAY);
-
+  else if(ps2.ButtonPressed(PSB_R1)) {      // SHOT ROTATION
+    if(shot_state == DRIBBLE || shot_state == ACCEPT) {
+      shot_millis = millis();
+    }
+    next_shot_state = SHOT;
+    
   }
-  else if(ps2.ButtonPressed(PSB_R2)) {
-    motor_shot_up.setSpeed(LONG_SHOT_PWM);
-    motor_shot_down.setSpeed(LONG_SHOT_PWM);
-    shot(LONG_SHOT_DELAY);
+  else if(ps2.ButtonPressed(PSB_R2)) {      // 
+    if(shot_state == DRIBBLE || shot_state == ACCEPT) {
+      shot_millis = millis();
+    }
+    next_shot_state = LONG_SHOT;
+    
   }
   else if(ps2.ButtonPressed(PSB_START)) {
-    motor_shot_up.setSpeed(ACCEPT_PWM);
-    motor_shot_down.setSpeed(ACCEPT_PWM);
+    shot_millis = millis();
+    next_shot_state = ACCEPT;
   }
+  else if(ps2.ButtonPressed(PSB_CIRCLE)) {
+    next_shot_state = IDLE;
+  }
+
+
+  if(shot_state != next_shot_state) {
+    if(millis() - shot_millis > 2000)
+      shot_state = next_shot_state;
+    else {
+      motor_shot_up.stop();
+      motor_shot_down.stop();
+    }
+  }
+  else {
+    if(shot_state == IDLE) {
+      motor_shot_up.stop();
+      motor_shot_down.stop();
+    }
+    else if(shot_state == DRIBBLE) {
+      motor_shot_up.setSpeed(-DRIBBLE_PWM/3);
+      motor_shot_down.setSpeed(DRIBBLE_PWM);
+    }
+    else if(shot_state == PASS) {
+      motor_shot_up.setSpeed(PASS_PWM);
+      motor_shot_down.setSpeed(PASS_PWM);
+    }
+    else if(shot_state == SHOT) {
+      motor_shot_up.setSpeed(SHOT_PWM);
+      motor_shot_down.setSpeed(SHOT_PWM);
+    }
+    else if(shot_state == LONG_SHOT) {
+      motor_shot_up.setSpeed(LONG_SHOT_PWM);
+      motor_shot_down.setSpeed(LONG_SHOT_PWM);
+    }
+    else if(shot_state == ACCEPT) {
+      motor_shot_up.setSpeed(ACCEPT_PWM);
+      motor_shot_down.setSpeed(ACCEPT_PWM);
+    }
+  }
+  
 }
 
 
@@ -238,7 +305,7 @@ void move() {
   float theta = 0;
 
   if(target.rotate == 0) {
-    if(lpms_running) {
+    if(gyro_running) {
       theta = angle - euler;
       if (theta > 180) theta -= 360;
       if (theta < -180) theta += 360;
@@ -260,22 +327,14 @@ void move() {
 
 }
 
+#ifdef SHOT_ROBOT 
 void encoderISR() {
   if(digitalRead(PIN_EN_B) == LOW)
     encoder++;
   else
     encoder--;
 }
-
-void shot(int duration) {
-  delay(duration); // Мотор бүрэн эргэлтээ авах хүртэл хүлээх
-  digitalWrite(RELAY_PINS[BALL], LOW);
-  delay(500);
-  digitalWrite(RELAY_PINS[BALL], HIGH);
-  motor_shot_up.stop();
-  motor_shot_down.stop();
-
-}
+#endif
 
 bool isLimitSwitchPressed() {
   if(digitalRead(PIN_LIMIT_SWITCH) == HIGH) {
@@ -344,15 +403,36 @@ String getValue(String data, String key) {
   return data.substring(start, end);
 }
 
+void shot(int duration) {
+  delay(duration); // Мотор бүрэн эргэлтээ авах хүртэл хүлээх
+  digitalWrite(SHOT_RELAY, LOW);
+  delay(500);
+  digitalWrite(SHOT_RELAY, HIGH);
+  motor_shot_up.stop();
+  motor_shot_down.stop();
+
+}
+
 void simulate() {
   float direction = 0, targetSpeed = 0, angle_speed = 0;
   int hand_speed = 0;
   while(1) {
-    if(lpms_running) {
-      if (lpms.requestAngle()) {
-        euler = lpms.euler[Z];
+    #ifdef SHOT_ROBOT
+      if(gyro_running) {
+        if (lpms.requestAngle()) {
+          euler = lpms.euler[Z];
+        }
       }
-    }
+    #else
+      if(gyro_running) {
+        if(mpu.update()) {
+          static uint32_t prev_ms = millis();
+          if(millis() > prev_ms + 25) {
+            euler = mpu.getYaw();
+          }
+        }
+      }
+    #endif
 
     if(Serial.available()) {
       String inputString = Serial.readStringUntil('\n');
@@ -395,22 +475,24 @@ void simulate() {
       else if(inputString.startsWith("hand")) {
         hand_speed = getValue(inputString, "pwm").toInt();
       }
-      // Шидэлт
+      // Шидэлтg
       else if(inputString.startsWith("dribble")) {
-        int speed = getValue(inputString, "pwm").toInt();
+        int speed1 = getValue(inputString, "pwm1").toInt();
+        int speed2 = getValue(inputString, "pwm2").toInt();
         unsigned long duration = getValue(inputString, "time").toInt();
-        motor_shot_up.stop();
-        motor_shot_down.setSpeed(speed);
+        motor_shot_up.setSpeed(speed1);
+        motor_shot_down.setSpeed(speed2);
         shot(duration);
-        delay(500);
-        motor_shot_up.setSpeed(ACCEPT_PWM);
-        motor_shot_up.setSpeed(ACCEPT_PWM);
+        // delay(500);
+        // motor_shot_up.setSpeed(ACCEPT_PWM);
+        // motor_shot_up.setSpeed(ACCEPT_PWM);
       }
       else if(inputString.startsWith("shot")) {         // shot and pass
-        int speed = getValue(inputString, "pwm").toInt();
+        int speed1 = getValue(inputString, "pwm1").toInt();
+        int speed2 = getValue(inputString, "pwm2").toInt();
         unsigned long duration = getValue(inputString, "time").toInt();
-        motor_shot_up.setSpeed(speed);
-        motor_shot_down.setSpeed(speed);
+        motor_shot_up.setSpeed(speed1);
+        motor_shot_down.setSpeed(speed2);
         shot(duration);
       }
       else if(inputString.startsWith("cancel")) {

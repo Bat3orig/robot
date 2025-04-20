@@ -12,7 +12,7 @@ class Main(tk.Tk):
         self.call('set_theme', 'light')
         self.title("Төмөр зам симулятор")
         self.configure(padx=(10), pady=(10))
-        self.geometry('1000x800')
+        self.geometry('1100x800')
 
         self.ser = serial.Serial()
         self.thread = threading.Thread()
@@ -33,7 +33,6 @@ class Main(tk.Tk):
         self.accel = tk.DoubleVar(value = 0.5)
         self.rotate_scale = tk.DoubleVar(value = 0.5)
 
-        self.shot_speed = tk.IntVar(value = 0)
         self.hand_speed = tk.IntVar(value = 0)
         self.hand_encoder = tk.IntVar(value = 0)
 
@@ -52,9 +51,11 @@ class Main(tk.Tk):
 
         self.pass_speed = tk.IntVar()
         self.pass_delay = tk.IntVar()
-        self.dribble_speed = tk.IntVar()
+        self.dribble_speed_top = tk.IntVar()
+        self.dribble_speed_bottom = tk.IntVar()
         self.dribble_delay = tk.IntVar()
-        self.shot_speed = tk.IntVar()
+        self.shot_speed_up = tk.IntVar()
+        self.shot_speed_down = tk.IntVar()
         self.shot_delay = tk.IntVar()
 
         # connection frame
@@ -143,28 +144,26 @@ class Main(tk.Tk):
         suuri.grid_rowconfigure(16, weight=0, pad=10)
 
         ttk.Label(shot, text="Шидэх механизм:").grid(row=0, column=0, sticky='EW')
-        # pass
-        ttk.Label(shot, text="Дамжуулах").grid(row=1, column=0, sticky='EW')
-        ttk.Entry(shot, textvariable=self.pass_speed, width=7).grid(row=1, column=1, sticky='EW', padx=5)
-        ttk.Entry(shot, textvariable=self.pass_delay, width=7).grid(row=1, column=2, sticky='EW', padx=5)
-        ttk.Button(shot, text="set", command=self.pass_ball).grid(row=1, column=3, sticky='EW', padx=5)
         # dribble
         ttk.Label(shot, text="Залах").grid(row=2, column=0, sticky='EW')
-        ttk.Entry(shot, textvariable=self.dribble_speed, width=7).grid(row=2, column=1, sticky='EW', padx=5)
-        ttk.Entry(shot, textvariable=self.dribble_delay, width=7).grid(row=2, column=2, sticky='EW', padx=5)
-        ttk.Button(shot, text="set", command=self.dribble_ball).grid(row=2, column=3, sticky='EW', padx=5)
+        ttk.Entry(shot, textvariable=self.dribble_speed_top, width=7).grid(row=2, column=1, sticky='EW', padx=5)
+        ttk.Entry(shot, textvariable=self.dribble_speed_bottom, width=7).grid(row=2, column=2, sticky='EW', padx=5)
+        ttk.Entry(shot, textvariable=self.dribble_delay, width=7).grid(row=2, column=3, sticky='EW', padx=5)
+        ttk.Button(shot, text="set", command=self.dribble_ball).grid(row=2, column=4, sticky='EW', padx=5)
         # shot
         ttk.Label(shot, text="Шидэх").grid(row=3, column=0, sticky='EW')
-        ttk.Entry(shot, textvariable=self.shot_speed, width=7).grid(row=3, column=1, sticky='EW', padx=5)
-        ttk.Entry(shot, textvariable=self.shot_delay, width=7).grid(row=3, column=2, sticky='EW', padx=5)
-        ttk.Button(shot, text="set", command=self.shot_ball).grid(row=3, column=3, sticky='EW', padx=5)
+        ttk.Entry(shot, textvariable=self.shot_speed_up, width=7).grid(row=3, column=1, sticky='EW', padx=5)
+        ttk.Entry(shot, textvariable=self.shot_speed_down, width=7).grid(row=3, column=2, sticky='EW', padx=5)
+        ttk.Entry(shot, textvariable=self.shot_delay, width=7).grid(row=3, column=3, sticky='EW', padx=5)
+        ttk.Button(shot, text="set", command=self.shot_ball).grid(row=3, column=4, sticky='EW', padx=5)
         # stop
-        ttk.Button(shot, text="stop", command=self.stop_shot).grid(row=4, column=3, sticky='EW', padx=5)
+        ttk.Button(shot, text="stop", command=self.stop_shot).grid(row=4, column=4, sticky='EW', padx=5)
 
         shot.grid_columnconfigure(0, weight=0)
         shot.grid_columnconfigure(1, weight=0)
         shot.grid_columnconfigure(2, weight=0)
         shot.grid_columnconfigure(3, weight=0)
+        shot.grid_columnconfigure(4, weight=0)
         shot.grid_rowconfigure(0, weight=0, pad=10)
         shot.grid_rowconfigure(1, weight=0, pad=10)
         shot.grid_rowconfigure(2, weight=0, pad=10)
@@ -214,15 +213,17 @@ class Main(tk.Tk):
         self.ser.write(command.encode())
 
     def shot_ball(self):
-        speed = self.shot_speed.get()
+        speed1 = self.shot_speed_up.get()
+        speed2 = self.shot_speed_down.get()
         delay = self.shot_delay.get()
-        command=f"shot,pwm={speed},time={delay}\n"
+        command=f"shot,pwm1={speed1},pwm2={speed2},time={delay}\n"
         self.ser.write(command.encode())
 
     def dribble_ball(self):
-        speed = self.dribble_speed.get()
+        speed1 = self.dribble_speed_top.get()
+        speed2 = self.dribble_speed_bottom.get()
         delay = self.dribble_delay.get()
-        command=f"dribble,pwm={speed},time={delay}\n"
+        command=f"dribble,pwm1={speed1},pwm2={speed2},time={delay}\n"
         self.ser.write(command.encode())
 
     def stop_shot(self):

@@ -57,7 +57,7 @@ void Motor::setSpeed(float targetSpeed) {
 
 void Motor::stop(bool brake) {
   if(_type == POLOLU)
-    analogWrite(_pwm, 250); 
+    digitalWrite(_pwm, HIGH); 
   digitalWrite(_dirA, brake);
   digitalWrite(_dirB, brake);
 }
