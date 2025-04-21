@@ -21,7 +21,6 @@
   LPMS lpms(Serial1);
 #else
   // PASS ROBOT has MPU9250 9 axis sensor
-  #include "MPU9250.h"
   Motor motor1(POLOLU, 46, 48, 4);  // pwm, A, B
   Motor motor2(POLOLU, 52, 50, 5);  
   Motor motor3(POLOLU, 38, 40, 2);
@@ -32,7 +31,6 @@
   float scale_m2 = 1; // 60 = 60
   float scale_m3 = 0.85; // 60 = 52
   float scale_m4 = 1.25; // 60 = 72
-  MPU9250 mpu;  
 #endif
 
 
@@ -93,7 +91,7 @@ void setup() {
     pinMode(PIN_EN_A, INPUT_PULLUP);
     pinMode(PIN_EN_B, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(PIN_EN_A), encoderISR, RISING);
-    motor1.init(10);
+    motor1.init(100);
     motor2.init(100);
     motor3.init(100);
     motor4.init(100);
@@ -107,13 +105,12 @@ void setup() {
       }
     }
   #else   // PASS_ROBOT. Init MPU9250
-    if (mpu.setup(0x68)) {  
-      gyro_running = true;
-    }
-    motor1.init(150);
-    motor2.init(150);
-    motor3.init(150);
-    motor4.init(150);
+    Serial1.begin(9600);
+    motor1.init(100);
+    motor2.init(100);
+    motor3.init(100);
+    motor4.init(100);
+    gyro_running = true;
   #endif
   motor_hand.init(200);
   motor_shot_up.init(250);
@@ -140,9 +137,9 @@ void setup() {
 
   // uncomment the following the lines for simulator of windows software.
   // Serial.println("log->Ready");
-  if(Serial) {
-    simulate();
-  }
+  // if(Serial) {
+  //   simulate();
+  // }
 }
 
 void loop() {
@@ -154,13 +151,10 @@ void loop() {
       }
     }
   #else
-    if(gyro_running) {
-      if(mpu.update()) {
-        static uint32_t prev_ms = millis();
-        if(millis() > prev_ms + 25) {
-          euler = mpu.getYaw();
-        }
-      }
+    if(Serial1.available()) {
+      String inputString = Serial1.readStringUntil('\n');
+      inputString.trim();
+      euler = inputString.toFloat();
     }
   #endif
 
@@ -424,18 +418,15 @@ void simulate() {
         }
       }
     #else
-      if(gyro_running) {
-        if(mpu.update()) {
-          static uint32_t prev_ms = millis();
-          if(millis() > prev_ms + 25) {
-            euler = mpu.getYaw();
-          }
-        }
+      if(Serial1.available()) {
+        String inputString = Serial.readStringUntil('\n');
+        inputString.trim();
+        euler = inputString.toFloat();
       }
     #endif
 
     if(Serial.available()) {
-      String inputString = Serial.readStringUntil('\n');
+      String inputString = Serial1.readStringUntil('\n');
       // move,dir=10,speed=12,scale=0.1,accel=0.1\n
       // stop\n
       inputString.trim();
