@@ -171,6 +171,8 @@ void loop() {
     angle = euler;
     current.speed = 0;
     target.speed = 0;
+    current.rotate = 0;
+    target.rotate = 0;
     motor_shot_up.stop();
     motor_shot_down.stop();
   }
