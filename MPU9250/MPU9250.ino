@@ -1,118 +1,74 @@
-#include "MPU9250.h"
-#include "eeprom_utils.h"
-#include "MadgwickAHRS.h"
+#include <Wire.h>
 
-MPU9250 mpu;
-// Madgwick filter;
+const int MPU_ADDR = 0x68; // I2C address of the MPU-9250 (usually 0x68)
+float gyro_sensitivity = 131.0; // For ±250°/s
+float yaw = 0.0;
+float gyro_bias_z = 0.0;
 
-uint32_t update_ms = millis();
+unsigned long previous_time;
 
 void setup() {
-    Serial.begin(115200);
-    Wire.begin();
-    delay(2000);
+  Wire.begin();
+  Serial.begin(9600);
 
-    if (!mpu.setup(0x68)) {  // change to your own address
-        while (1) {
-            Serial.println("MPU connection failed. Please check your connection with `connection_check` example.");
-            delay(5000);
-        }
-    }
+  // Wake up MPU-9250
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x6B);  // PWR_MGMT_1
+  Wire.write(0x00);  // Wake up
+  Wire.endTransmission(true);
 
-    loadCalibration();
+  // Optional: Set gyro range to ±250°/s
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x1B);  // GYRO_CONFIG
+  Wire.write(0x00);  // ±250°/s
+  Wire.endTransmission(true);
 
-    mpu.selectFilter(QuatFilterSel::MADGWICK);
-    mpu.setFilterIterations(1);
-    
-    // filter.begin(20);  // Sensor fusion rate (Hz)
-    // delay(1000);
+  delay(100);
+  calibrateGyro();
+
+  previous_time = millis();
 }
 
 void loop() {
+  // Read raw gyro Z
+  int16_t gz = readGyroZ();
+  float gyro_z_dps = (gz - gyro_bias_z) / gyro_sensitivity;
 
-  if (mpu.update()) {
-        static uint32_t prev_ms = millis();
-        if (millis() > prev_ms + 25) {
-            Serial.println(mpu.getYaw());
-            prev_ms = millis();
-        }
-    }
+  // Compute dt
+  unsigned long current_time = millis();
+  float dt = (current_time - previous_time) / 1000.0;
+  previous_time = current_time;
 
-  // mpu.update_accel_gyro();
-  // float gx = mpu.getGyroX() * DEG_TO_RAD;
-  // float gy = mpu.getGyroY() * DEG_TO_RAD;
-  // float gz = mpu.getGyroZ() * DEG_TO_RAD;
+  // Integrate yaw
+  yaw += gyro_z_dps * dt;
 
-  // float ax = mpu.getAccX();
-  // float ay = mpu.getAccY();
-  // float az = mpu.getAccZ();
+  // Wrap yaw
+  if (yaw > 180.0) yaw -= 360.0;
+if (yaw < -180.0) yaw += 360.0;
 
-  // mpu.update_mag();
+  Serial.println(yaw, 2);
 
-  // float mx = mpu.getMagX();
-  // float my = mpu.getMagY();
-  // float mz = mpu.getMagZ();
-
-
-  // if(millis() - update_ms > 50) {
-  //   update_ms = millis();
-  //   filter.update(gx, gy, gz, ax, ay, az, mx, my, mz);
-  //   Serial.print(filter.getYaw() * RAD_TO_DEG); 
-  //   Serial.print(", ");
-  //   Serial.println(filter.getYawWithCompute());
-  // }
+  delay(10);  // ~100Hz update
 }
 
-void print_calibration() {
-    Serial.println("< calibration parameters >");
-    Serial.println("accel bias [g]: ");
-    Serial.print(mpu.getAccBiasX() * 1000.f / (float)MPU9250::CALIB_ACCEL_SENSITIVITY);
-    Serial.print(", ");
-    Serial.print(mpu.getAccBiasY() * 1000.f / (float)MPU9250::CALIB_ACCEL_SENSITIVITY);
-    Serial.print(", ");
-    Serial.print(mpu.getAccBiasZ() * 1000.f / (float)MPU9250::CALIB_ACCEL_SENSITIVITY);
-    Serial.println();
-    Serial.println("gyro bias [deg/s]: ");
-    Serial.print(mpu.getGyroBiasX() / (float)MPU9250::CALIB_GYRO_SENSITIVITY);
-    Serial.print(", ");
-    Serial.print(mpu.getGyroBiasY() / (float)MPU9250::CALIB_GYRO_SENSITIVITY);
-    Serial.print(", ");
-    Serial.print(mpu.getGyroBiasZ() / (float)MPU9250::CALIB_GYRO_SENSITIVITY);
-    Serial.println();
-    Serial.println("mag bias [mG]: ");
-    Serial.print(mpu.getMagBiasX());
-    Serial.print(", ");
-    Serial.print(mpu.getMagBiasY());
-    Serial.print(", ");
-    Serial.print(mpu.getMagBiasZ());
-    Serial.println();
-    Serial.println("mag scale []: ");
-    Serial.print(mpu.getMagScaleX());
-    Serial.print(", ");
-    Serial.print(mpu.getMagScaleY());
-    Serial.print(", ");
-    Serial.print(mpu.getMagScaleZ());
-    Serial.println();
+// Read raw gyro Z
+int16_t readGyroZ() {
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x47); // GYRO_ZOUT_H
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU_ADDR, 2, true);
+  int16_t gz = Wire.read() << 8 | Wire.read();
+  return gz;
 }
 
-void calibrateAndSave() {
-    Serial.println("Accel Gyro calibration will start in 5sec.");
-    Serial.println("Please leave the device still on the flat plane.");
-    mpu.verbose(true);
-    delay(5000);
-    mpu.calibrateAccelGyro();
+// Simple gyro Z bias calibration
+void calibrateGyro() {
+  long sum = 0;
+  const int samples = 500;
 
-    Serial.println("Mag calibration will start in 5sec.");
-    Serial.println("Please Wave device in a figure eight until done.");
-    delay(5000);
-    mpu.calibrateMag();
-
-    print_calibration();
-    mpu.verbose(false);
-
-    // save to eeprom
-    saveCalibration();
-
-    // load from eeprom
-    loadCalibration();
+  for (int i = 0; i < samples; i++) {
+    sum += readGyroZ();
+    delay(5);
+  }
+  gyro_bias_z = sum / (float)samples;
 }
