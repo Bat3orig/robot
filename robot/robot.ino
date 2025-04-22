@@ -421,14 +421,14 @@ void simulate() {
       }
     #else
       if(Serial1.available()) {
-        String inputString = Serial.readStringUntil('\n');
+        String inputString = Serial1.readStringUntil('\n');
         inputString.trim();
         euler = inputString.toFloat();
       }
     #endif
 
     if(Serial.available()) {
-      String inputString = Serial1.readStringUntil('\n');
+      String inputString = Serial.readStringUntil('\n');
       // move,dir=10,speed=12,scale=0.1,accel=0.1\n
       // stop\n
       inputString.trim();
